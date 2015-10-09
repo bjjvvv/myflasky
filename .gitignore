@@ -1,2 +1,4 @@
 *.swp
 *.ico
+*.pyc
+__pycache__/

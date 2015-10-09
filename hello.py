@@ -7,21 +7,49 @@ from flask.ext.wtf import Form
 from flask.ext.sqlalchemy import SQLAlchemy
 from wtforms import StringField, SubmitField
 from wtforms.validators import Required
+from flask.ext.script import Shell
+from flask.ext.migrate import Migrate, MigrateCommand
+from flask.ext.mail import Mail, Message
 import os.path
 
-basedir = os.path.abspath(os.path.dirname(__name__))
+
+basedir = os.path.abspath(os.path.dirname(__file__))
 
 app = Flask(__name__)
 app.config['DEBUG'] = True
 app.config['SECRET_KEY'] = 'bian jia jun'
-app.config['SQLAlCHEMY_DATABASE_URI'] = \
+app.config['SQLALCHEMY_DATABASE_URI'] =\
     'sqlite:///' + os.path.join(basedir, 'data.sqlite')
-app. config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
+app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
 
-db = SQLAlchemy(app)
+# mail configuration
+app.config['MAIL_SERVER'] = 'smtp.qq.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] =\
+    os.environ.get('MAIL_QQ_USERNAME')
+app.config['MAIL_PASSWORD'] =\
+    os.environ.get('MAIL_QQ_PASSWORD')
+app.config['FLASK_MAIL_SUBJECT_PREFIX'] = '[FLASKY]'
+app.config['FLASK_MAIL_SENDER'] = 'BJJ 514739571@qq.com'
+
+
 manager = Manager(app)
 bootstrap = Bootstrap(app)
 moment = Moment(app)
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+mail = Mail(app)
+
+manager.add_command('db', MigrateCommand)
+
+
+def send_mail(to, subject, tempalte, **kwargs):
+    msg = Message(app.config[FLASK_MAIL_SUBJECT_PREFIX] + subject,
+                             sender=app.config['FLASK_MAIL_SENDER'],
+                             recipients=[to])
+    msg.body = render_template(tempalte + '.txt', **kwargs)
+    msg.html = render_template(tempalte + '.html', **kwargs)
 
 
 class Role(db.Model):
@@ -29,16 +57,29 @@ class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True)
 
+    users = db.relationship('User', backref='role', lazy='dynamic')
+
     def __repr__(self):
         return '<Role %r>' % self.name
 
 
 class User(db. Model):
     __tablename__ = 'users'
-    id = db. Column(db. Integer, primary_key=True)
-    username = db. Column(db. String(64), unique=True, index=True)
+    id = db.Column(db. Integer, primary_key=True)
+    username = db.Column(db. String(64), unique=True, index=True)
+
+    role_id = db.Column(db.Integer,
+                        db.ForeignKey('roles.id'))
+
     def __repr__(self):
         return '<User %r>' % self. username
+
+
+def make_shell_context():
+    return dict(app=app, db=db, User=User, Role=Role)
+
+manager.add_command("shell",
+                    Shell(make_context=make_shell_context))
 
 
 class NameForm(Form):
@@ -60,15 +101,20 @@ def internal_server_error(e):
 def index():
     form = NameForm()
     if form.validate_on_submit():
-        new_name = form.name.data
+        user = User.query.filter_by(
+            username=form.name.data).first()
+        if user is None:
+            user = User(username=form.name.data)
+            db.session.add(user)
+            session['known'] = False
+        else:
+            session['known'] = True
+        session['name'] = form.name.data
         form.name.data = ''
-        old_name = session.get('name')
-        if old_name is not None and old_name != new_name:
-            flash('Looks like you have changed your name')
-        session['name'] = new_name
         return redirect(url_for('index'))
-    return render_template('index.html', form=form, name=session.get('name'),
-                           current_time=datetime.utcnow())
+    return render_template('index.html',
+                           form=form, name=session.get('name'),
+                           known=session.get('known', False))
 
 
 @app.route('/user/<name>')
