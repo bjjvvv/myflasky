@@ -27,11 +27,12 @@ app.config['MAIL_SERVER'] = 'smtp.qq.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] =\
-    os.environ.get('MAIL_QQ_USERNAME')
+    os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] =\
-    os.environ.get('MAIL_QQ_PASSWORD')
+    os.environ.get('MAIL_PASSWORD')
 app.config['FLASK_MAIL_SUBJECT_PREFIX'] = '[FLASKY]'
-app.config['FLASK_MAIL_SENDER'] = 'BJJ 514739571@qq.com'
+app.config['FLASK_MAIL_SENDER'] = '514739571@qq.com'
+app.config['FLASK_ADMIN']='bjjvvv@163.com'
 
 
 manager = Manager(app)
@@ -44,13 +45,13 @@ mail = Mail(app)
 manager.add_command('db', MigrateCommand)
 
 
-def send_mail(to, subject, tempalte, **kwargs):
-    msg = Message(app.config[FLASK_MAIL_SUBJECT_PREFIX] + subject,
+def send_email(to, subject, template, **kwargs):
+    msg = Message(app.config['FLASK_MAIL_SUBJECT_PREFIX'] + subject,
                              sender=app.config['FLASK_MAIL_SENDER'],
                              recipients=[to])
-    msg.body = render_template(tempalte + '.txt', **kwargs)
-    msg.html = render_template(tempalte + '.html', **kwargs)
-
+    msg.body = render_template(template + '.txt', **kwargs)
+    msg.html = render_template(template + '.html', **kwargs)
+    mail.send(msg)
 
 class Role(db.Model):
     __tablename__ = 'roles'
@@ -107,6 +108,12 @@ def index():
             user = User(username=form.name.data)
             db.session.add(user)
             session['known'] = False
+            if app.config['FLASK_ADMIN']:
+                send_email(
+                    app.config['FLASK_ADMIN'], 'New User',
+                    'mail/new_user', user=user
+                )
+                print(user.username)
         else:
             session['known'] = True
         session['name'] = form.name.data

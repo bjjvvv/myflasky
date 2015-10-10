@@ -1,4 +1,10 @@
+*.py[cod]
+
 *.swp
+
 *.ico
-*.pyc
+
 __pycache__/
+
+# pycharm
+.idea/
